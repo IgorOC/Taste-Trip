@@ -1,22 +1,8 @@
-export interface User {
-  id: string;
-  email: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface TripFormData {
-  origin: string;
-  destination: string;
-  startDate: string;
-  endDate: string;
-  budget: number;
-}
+// Trip.ts
 
 export interface Trip {
   id: string;
   user_id: string;
-  origin: string;
   destination: string;
   start_date: string;
   end_date: string;
@@ -25,52 +11,97 @@ export interface Trip {
   itinerary?: TripItinerary;
   weather_data?: WeatherData;
   local_cuisine?: LocalCuisine;
-  created_at: string;
-  updated_at: string;
 }
 
 export interface TripItinerary {
-  days: DayPlan[];
-  recommendations: {
-    accommodation: string[];
-    transportation: string[];
-    activities: string[];
-  };
-  budget_breakdown: {
-    accommodation: number;
-    food: number;
-    transportation: number;
-    activities: number;
-    total: number;
-  };
+  overview?: TripOverview;
+  days: TripDay[];
+  final_tips?: FinalTips;
+  recommendations?: TripRecommendations;
+  budget_breakdown?: BudgetBreakdown;
 }
 
-export interface DayPlan {
-  day: number;
-  date: string;
-  activities: Activity[];
-  meals: Meal[];
-}
-
-export interface Activity {
-  time: string;
+export interface TripOverview {
   title: string;
-  description: string;
-  location: string;
-  estimated_cost: number;
-  category: "attraction" | "culture" | "nature" | "entertainment";
+  period: string;
+  duration: string;
+  travelers: string;
+  budget_estimate: string;
+  introduction: string;
 }
 
-export interface Meal {
-  time: "breakfast" | "lunch" | "dinner" | "snack";
-  suggestion: string;
-  location: string;
-  estimated_cost: number;
+export interface TripDay {
+  day: number;
+  title: string;
+  morning?: {
+    description: string;
+    tip: string;
+  };
+  lunch?: {
+    options: TripLunchOption[];
+    tip: string;
+  };
+  afternoon?: {
+    activity: string;
+    location: string;
+    duration: string;
+    how_to_get: string;
+    tip: string;
+  };
+  dinner?: {
+    name: string;
+    type: string;
+    link: string;
+  };
+  night_activity?: string;
 }
 
-export type WeatherData = {
+export interface TripLunchOption {
+  name: string;
+  type: string;
+  link: string;
+}
+
+export interface FinalTips {
+  transportation: string;
+  average_meal_cost: string;
+  tipping: string;
+  safety: string;
+  weather: string;
+  money: string;
+  local_culture: string;
+  emergency: {
+    police: string;
+    hospital: string;
+  };
+  shopping: string;
+  useful_links: {
+    hotels: string;
+    transport: string;
+    insurance: string;
+    tours: string;
+  };
+}
+
+export interface TripRecommendations {
+  accommodation: string[];
+  transportation: string[];
+  activities: string[];
+}
+
+export interface BudgetBreakdown {
+  accommodation: number;
+  food: number;
+  transportation: number;
+  activities: number;
+  total: number;
+}
+
+export interface WeatherData {
   location: {
     name: string;
+    region: string;
+    country: string;
   };
   current: {
     temperature: number;
@@ -78,36 +109,27 @@ export type WeatherData = {
     humidity: number;
     wind_speed: number;
   };
-  forecast: {
-    date: string;
-    temperature: {
-      min: number;
-      max: number;
-    };
-    description: string;
-    precipitation: number;
-  }[];
-};
+  forecast: WeatherForecast[];
+}
 
-export interface DayWeather {
+export interface WeatherForecast {
   date: string;
   temperature: {
     min: number;
     max: number;
   };
   description: string;
-  icon: string;
   precipitation: number;
 }
 
 export interface LocalCuisine {
-  typical_dishes: Dish[];
-  local_ingredients: string[];
   food_culture: string;
-  restaurant_recommendations: Restaurant[];
+  typical_dishes: TypicalDish[];
+  local_ingredients: string[];
+  restaurant_recommendations: RestaurantRecommendation[];
 }
 
-export interface Dish {
+export interface TypicalDish {
   name: string;
   description: string;
   ingredients: string[];
@@ -117,53 +139,10 @@ export interface Dish {
   cultural_significance: string;
 }
 
-export interface Restaurant {
+export interface RestaurantRecommendation {
   name: string;
-  type: string;
   description: string;
+  type: string;
   price_range: "baixo" | "medio" | "alto";
   specialties: string[];
-}
-
-// API Response Types
-export interface OpenWeatherResponse {
-  current: {
-    temp: number;
-    weather: Array<{
-      main: string;
-      description: string;
-      icon: string;
-    }>;
-    humidity: number;
-    wind_speed: number;
-  };
-  daily: Array<{
-    dt: number;
-    temp: {
-      min: number;
-      max: number;
-    };
-    weather: Array<{
-      main: string;
-      description: string;
-      icon: string;
-    }>;
-    pop: number;
-  }>;
-}
-
-export interface SpoonacularResponse {
-  recipes: Array<{
-    id: number;
-    title: string;
-    summary: string;
-    ingredients: Array<{
-      name: string;
-      amount: number;
-      unit: string;
-    }>;
-    instructions: string;
-    readyInMinutes: number;
-    servings: number;
-  }>;
 }

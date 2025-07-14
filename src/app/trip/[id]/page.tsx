@@ -4,13 +4,16 @@ import { TripDisplay } from "@/components/trip/TripDisplay";
 import { Header } from "@/components/layout/Header";
 
 interface TripPageProps {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 export default async function TripPage({ params }: TripPageProps) {
-const supabase = await createServerSupabaseClient();
+  // Aguardar os parâmetros
+  const resolvedParams = await params;
+
+  const supabase = await createServerSupabaseClient();
 
   // Verificar autenticação
   const {
@@ -25,7 +28,7 @@ const supabase = await createServerSupabaseClient();
   const { data: trip, error } = await supabase
     .from("trips")
     .select("*")
-    .eq("id", params.id)
+    .eq("id", resolvedParams.id) // Use resolvedParams.id
     .eq("user_id", user.id)
     .single();
 

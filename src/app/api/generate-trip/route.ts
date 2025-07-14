@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { createClient } from "@/lib/supabase";
+import { createServerClient } from "@supabase/ssr";
 import { getDaysCount, getBudgetCategory } from "@/lib/utils";
+import { cookies } from "next/headers";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -9,39 +11,182 @@ const openai = new OpenAI({
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient();
+    // 🔍 DEBUG: Vamos ver o que está acontecendo
+    console.log("=== DEBUG AUTENTICAÇÃO ===");
 
-    // Verificar autenticação
-    const {
+    // Verificar cookies
+    const cookieStore = await cookies();
+    const allCookies = cookieStore.getAll();
+    console.log(
+      "Todos os cookies:",
+      allCookies.map((c) => c.name)
+    );
+
+    // Verificar headers
+    const authHeader = request.headers.get("authorization");
+    console.log("Header Authorization:", authHeader);
+
+    // Criar cliente Supabase para servidor
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+          set(name: string, value: string, options: any) {
+            // No-op para API routes
+          },
+          remove(name: string, options: any) {
+            // No-op para API routes
+          },
+        },
+      }
+    );
+
+    // Tentar obter usuário com mais detalhes
+    let {
       data: { user },
+      error: userError,
     } = await supabase.auth.getUser();
 
+    console.log("Usuário obtido:", user ? user.id : "null");
+    console.log("Erro ao obter usuário:", userError);
+
+    // Se não conseguir pelo método normal, tente pelo token dos cookies
     if (!user) {
-      return NextResponse.json(
-        { error: "Usuário não autenticado" },
-        { status: 401 }
+      console.log("Tentando método alternativo...");
+
+      // Procurar token nos cookies
+      const authCookie = allCookies.find(
+        (cookie) =>
+          cookie.name.includes("auth-token") &&
+          cookie.name.includes("shdzhrdzfszbrtdvadpk") // Seu projeto atual
       );
+
+      console.log("Cookie de auth encontrado:", authCookie ? "SIM" : "NÃO");
+
+      if (authCookie) {
+        try {
+          // Decodificar o token do cookie (formato base64)
+          let cookieValue = decodeURIComponent(authCookie.value);
+
+          // Remover o prefixo "base64-" se presente
+          if (cookieValue.startsWith("base64-")) {
+            cookieValue = cookieValue.substring(7); // Remove "base64-"
+            cookieValue = atob(cookieValue); // Decode base64
+          }
+
+          const tokenData = JSON.parse(cookieValue);
+          console.log(
+            "Token decodificado:",
+            tokenData.access_token ? "Token presente" : "Token ausente"
+          );
+
+          // Tentar definir a sessão manualmente - use o mesmo cliente do servidor
+          const serverSupabase = createServerClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            {
+              cookies: {
+                get(name: string) {
+                  return cookieStore.get(name)?.value;
+                },
+                set(name: string, value: string, options: any) {
+                  // No-op para API routes
+                },
+                remove(name: string, options: any) {
+                  // No-op para API routes
+                },
+              },
+            }
+          );
+
+          const { data: sessionData, error: sessionError } =
+            await serverSupabase.auth.setSession({
+              access_token: tokenData.access_token,
+              refresh_token: tokenData.refresh_token,
+            });
+
+          console.log(
+            "Sessão definida:",
+            sessionData.user ? "SUCESSO" : "FALHOU"
+          );
+          console.log("Erro da sessão:", sessionError);
+
+          if (sessionData.user) {
+            // Definir o usuário para continuar o processamento
+            user = sessionData.user;
+            console.log("✅ Usuário autenticado via cookie!");
+          }
+        } catch (parseError) {
+          console.log("Erro ao processar cookie:", parseError);
+        }
+      }
+
+      // Se ainda não conseguiu autenticar
+      if (!user) {
+        return NextResponse.json(
+          {
+            error: "Usuário não autenticado",
+            debug: {
+              userFound: !!user,
+              cookiesCount: allCookies.length,
+              authCookieFound: !!allCookies.find((c) =>
+                c.name.includes("auth-token")
+              ),
+            },
+          },
+          { status: 401 }
+        );
+      }
     }
 
     const body = await request.json();
-    const { origin, destination, startDate, endDate, budget, budget_category } =
-      body;
+    const {
+      origin,
+      destination,
+      startDate,
+      endDate,
+      budget,
+      budget_category,
+      title,
+      adults,
+      childrenString,
+      travelStyle,
+      transportPreference,
+      accommodationPreference,
+      dietaryRestrictions,
+      accessibility,
+      specialNotes,
+      interests,
+    } = body;
 
-    if (!origin || !destination || !startDate || !endDate || !budget) {
+    if (
+      !origin ||
+      !destination ||
+      !startDate ||
+      !endDate ||
+      !budget ||
+      !adults
+    ) {
       return NextResponse.json(
         { error: "Dados obrigatórios faltando" },
         { status: 400 }
       );
     }
 
+    console.log("✅ Prosseguindo com a geração do roteiro...");
+
     const days = getDaysCount(startDate, endDate);
     const category = budget_category || getBudgetCategory(budget);
 
-    // 1. Buscar dados do clima
+    // Usar URL base dinamicamente
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
     const weatherResponse = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL}/api/weather?city=${encodeURIComponent(
-        destination
-      )}`
+      `${baseUrl}/api/weather?city=${encodeURIComponent(destination)}`
     );
 
     let weatherData = null;
@@ -49,11 +194,8 @@ export async function POST(request: NextRequest) {
       weatherData = await weatherResponse.json();
     }
 
-    // 2. Buscar informações gastronômicas
     const cuisineResponse = await fetch(
-      `${
-        process.env.NEXT_PUBLIC_APP_URL
-      }/api/cuisine?destination=${encodeURIComponent(destination)}`
+      `${baseUrl}/api/cuisine?destination=${encodeURIComponent(destination)}`
     );
 
     let cuisineData = null;
@@ -61,14 +203,13 @@ export async function POST(request: NextRequest) {
       cuisineData = await cuisineResponse.json();
     }
 
-    // 3. Gerar roteiro com IA
     const budgetGuidelines = {
       baixo: {
         accommodation: "hostels, pousadas simples, Airbnb econômico",
         transportation: "transporte público, caminhadas, ônibus",
         food: "comida de rua, restaurantes populares, mercados locais",
         activities: "atrações gratuitas, parques, museus gratuitos",
-        dailyBudget: Math.round((budget / days) * 0.8), // 80% do orçamento para gastos diários
+        dailyBudget: Math.round((budget / days) * 0.8),
       },
       medio: {
         accommodation: "hotéis 3 estrelas, pousadas confortáveis",
@@ -93,88 +234,34 @@ export async function POST(request: NextRequest) {
       : "";
 
     const prompt = `
-    Crie um roteiro detalhado de viagem de ${days} dias para ${destination}, saindo de ${origin}.
-    
-    DADOS DA VIAGEM:
-    - Destino: ${destination}
-    - Origem: ${origin}
-    - Período: ${startDate} a ${endDate} (${days} dias)
-    - Orçamento total: R$ ${budget}
-    - Categoria: ${category}
-    - Orçamento diário sugerido: R$ ${guidelines.dailyBudget}
-    
-    INFORMAÇÕES DO CLIMA:
-    ${weatherInfo}
-    
-    DIRETRIZES DE ORÇAMENTO (${category}):
-    - Hospedagem: ${guidelines.accommodation}
-    - Transporte: ${guidelines.transportation}
-    - Alimentação: ${guidelines.food}
-    - Atividades: ${guidelines.activities}
-    
-    INSTRUÇÕES:
-    1. Crie um roteiro dia a dia realístico
-    2. Inclua horários aproximados para atividades
-    3. Sugira custos estimados em reais
-    4. Adapte ao clima se fornecido
-    5. Inclua dicas práticas e locais
-    6. Mantenha-se dentro do orçamento
-    
-    Formate a resposta em JSON válido seguindo esta estrutura:
-    {
-      "days": [
-        {
-          "day": 1,
-          "date": "${startDate}",
-          "activities": [
-            {
-              "time": "09:00",
-              "title": "Chegada e Check-in",
-              "description": "Descrição detalhada",
-              "location": "Nome do local",
-              "estimated_cost": 100,
-              "category": "accommodation"
-            }
-          ],
-          "meals": [
-            {
-              "time": "lunch",
-              "suggestion": "Restaurante local",
-              "location": "Endereço/região",
-              "estimated_cost": 40
-            }
-          ]
-        }
-      ],
-      "recommendations": {
-        "accommodation": ["Sugestão 1", "Sugestão 2"],
-        "transportation": ["Como se locomover"],
-        "activities": ["Atividade imperdível 1"]
-      },
-      "budget_breakdown": {
-        "accommodation": 800,
-        "food": 600,
-        "transportation": 300,
-        "activities": 300,
-        "total": 2000
-      }
-    }
-    
-    Seja específico, prático e realístico com custos brasileiros atuais.
-    `;
+Crie um roteiro de viagem para ${destination}, saindo de ${origin}, com duração de ${days} dias (de ${startDate} a ${endDate}), orçamento total de R${budget} (${category}), estilo de viagem: ${
+      travelStyle || "não informado"
+    }, transporte preferido: ${
+      transportPreference || "não informado"
+    }, hospedagem: ${accommodationPreference || "não informada"}.
+
+INFORMAÇÕES ADICIONAIS:
+- Título do Roteiro: ${title || "Roteiro Personalizado"}
+- Viajantes: ${adults} adulto(s) ${childrenString ? `e ${childrenString}` : ""}
+- Restrições alimentares: ${dietaryRestrictions || "nenhuma"}
+- Acessibilidade: ${accessibility || "nenhuma"}
+- Interesses principais: ${interests?.join(", ") || "não informados"}
+- Observações: ${specialNotes || "nenhuma"}
+- Clima (se disponível): ${weatherInfo}
+
+Siga a estrutura JSON com overview, days e final_tips.
+Responda apenas com o JSON.
+`;
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: "gpt-3.5-turbo", 
       messages: [
         {
           role: "system",
           content:
-            "Você é um especialista em turismo brasileiro com conhecimento profundo sobre custos, atrações e logística de viagens. Sempre forneça informações precisas e atualizadas.",
+            "Você é um especialista em turismo com conhecimento profundo sobre custos, atrações, restaurantes locais e logística de viagens.",
         },
-        {
-          role: "user",
-          content: prompt,
-        },
+        { role: "user", content: prompt },
       ],
       temperature: 0.7,
       max_tokens: 4000,
@@ -186,15 +273,41 @@ export async function POST(request: NextRequest) {
       throw new Error("Resposta vazia da OpenAI");
     }
 
+    console.log(
+      "Resposta bruta da IA:",
+      responseText.substring(0, 200) + "..."
+    );
+
     let itineraryData;
     try {
-      itineraryData = JSON.parse(responseText);
+      // Limpar a resposta removendo blocos de código markdown
+      let cleanedResponse = responseText.trim();
+
+      // Remover ```json do início
+      if (cleanedResponse.startsWith("```json")) {
+        cleanedResponse = cleanedResponse.substring(7);
+      }
+
+      // Remover ``` do final
+      if (cleanedResponse.endsWith("```")) {
+        cleanedResponse = cleanedResponse.substring(
+          0,
+          cleanedResponse.length - 3
+        );
+      }
+
+      // Remover qualquer whitespace extra
+      cleanedResponse = cleanedResponse.trim();
+
+      console.log("JSON limpo:", cleanedResponse.substring(0, 200) + "...");
+
+      itineraryData = JSON.parse(cleanedResponse);
     } catch (parseError) {
-      console.error("Erro ao fazer parse da resposta da IA:", parseError);
+      console.error("Erro ao fazer parse da resposta:", parseError);
+      console.error("Resposta completa:", responseText);
       throw new Error("Erro ao processar resposta da IA");
     }
 
-    // 4. Salvar no banco de dados
     const { data: trip, error } = await supabase
       .from("trips")
       .insert({
@@ -208,21 +321,22 @@ export async function POST(request: NextRequest) {
         itinerary: itineraryData,
         weather_data: weatherData,
         local_cuisine: cuisineData,
+        // Removidos todos os campos que não existem na tabela:
+        // title, adults, children_string, travel_style, transport_preference,
+        // accommodation_preference, dietary_restrictions, accessibility,
+        // special_notes, interests
       })
       .select()
       .single();
 
     if (error) {
-      console.error("Erro ao salvar viagem:", error);
-      throw new Error("Erro ao salvar viagem no banco de dados");
+      console.error("Erro ao salvar:", error);
+      throw new Error("Erro ao salvar roteiro");
     }
 
-    return NextResponse.json({
-      tripId: trip.id,
-      message: "Roteiro gerado com sucesso!",
-    });
+    return NextResponse.json({ tripId: trip.id });
   } catch (error) {
-    console.error("Erro na API de geração de roteiro:", error);
+    console.error("Erro na API:", error);
     return NextResponse.json(
       { error: "Erro interno do servidor" },
       { status: 500 }
