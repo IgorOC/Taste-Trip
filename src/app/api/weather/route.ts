@@ -1,14 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 
-interface WeatherParams {
-  city: string;
-  country?: string;
+interface TripForecast {
+  date: string;
+  dayName: string;
+  temperature: number;
+  tempMin: number;
+  tempMax: number;
+  description: string;
+  icon: string;
+}
+
+interface ForecastDay {
+  dt: number;
+  temp: {
+    min: number;
+    max: number;
+  };
+  weather: {
+    description: string;
+    icon: string;
+  }[];
 }
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const city = searchParams.get("city");
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
 
     if (!city) {
       return NextResponse.json(
@@ -53,16 +72,66 @@ export async function GET(request: NextRequest) {
 
     const weatherData = await weatherResponse.json();
 
+    // Se temos datas de início e fim, calcular previsão específica para a viagem
+    const dailyForecast: TripForecast[] = [];
+
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const today = new Date();
+
+      // Calcular quantos dias até o início da viagem
+      const daysUntilStart = Math.ceil(
+        (start.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      // Calcular duração da viagem
+      const tripDuration = Math.ceil(
+        (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      // Pegar previsão para os dias da viagem (máximo 8 dias no OpenWeather free)
+      const forecastStart = Math.max(0, Math.min(daysUntilStart, 7));
+      const forecastEnd = Math.min(forecastStart + tripDuration, 8);
+
+      for (let i = forecastStart; i < forecastEnd; i++) {
+        if (weatherData.daily[i]) {
+          const day = weatherData.daily[i];
+          const date = new Date(day.dt * 1000);
+
+          // Calcular dia da semana em português
+          const weekdays = [
+            "Domingo",
+            "Segunda",
+            "Terça",
+            "Quarta",
+            "Quinta",
+            "Sexta",
+            "Sábado",
+          ];
+          const dayName = weekdays[date.getDay()];
+
+          dailyForecast.push({
+            date: date.toISOString().split("T")[0],
+            dayName: dayName,
+            temperature: Math.round((day.temp.min + day.temp.max) / 2), // Temperatura média
+            tempMin: Math.round(day.temp.min),
+            tempMax: Math.round(day.temp.max),
+            description: day.weather[0].description,
+            icon: day.weather[0].icon,
+          });
+        }
+      }
+    }
+
     // Formatar dados para nosso formato
     const formattedData = {
       current: {
         temperature: Math.round(weatherData.current.temp),
         description: weatherData.current.weather[0].description,
-        humidity: weatherData.current.humidity,
-        wind_speed: weatherData.current.wind_speed,
         icon: weatherData.current.weather[0].icon,
       },
-      forecast: weatherData.daily.slice(0, 7).map((day: any) => ({
+      forecast: weatherData.daily.slice(0, 7).map((day: ForecastDay) => ({
         date: new Date(day.dt * 1000).toISOString().split("T")[0],
         temperature: {
           min: Math.round(day.temp.min),
@@ -70,8 +139,9 @@ export async function GET(request: NextRequest) {
         },
         description: day.weather[0].description,
         icon: day.weather[0].icon,
-        precipitation: Math.round((day.pop || 0) * 100), // Probabilidade de chuva em %
       })),
+      // Nova seção específica para a viagem
+      tripForecast: dailyForecast,
       location: {
         name: geoData[0].name,
         country: geoData[0].country,

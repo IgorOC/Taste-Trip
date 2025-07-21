@@ -13,14 +13,91 @@ import {
   Info,
 } from "lucide-react";
 
+// Type definitions
+interface WeatherForecast {
+  dayName: string;
+  temperature: number;
+  description: string;
+}
+
+interface CurrentWeather {
+  temperature: number;
+  description: string;
+}
+
+interface WeatherData {
+  tripForecast?: WeatherForecast[];
+  current?: CurrentWeather;
+}
+
+interface Dish {
+  name: string;
+  description: string;
+  preparation_time: number;
+  difficulty: "easy" | "medium" | "hard";
+}
+
+interface Cuisine {
+  typical_dishes: Dish[];
+}
+
+interface ActivityPeriod {
+  description?: string;
+  activity?: string;
+  location?: string;
+  tip?: string;
+  name?: string;
+}
+
+interface DayItinerary {
+  day?: number;
+  title?: string;
+  morning?: ActivityPeriod;
+  afternoon?: ActivityPeriod;
+  lunch?: ActivityPeriod;
+  dinner?: ActivityPeriod;
+  night_activity?: string;
+}
+
+interface FinalTips {
+  transportation?: string;
+  weather?: string;
+  tipping?: string;
+  safety?: string;
+  local_culture?: string;
+  shopping?: string;
+}
+
+interface ItineraryOverview {
+  title?: string;
+  introduction?: string;
+}
+
+interface Itinerary {
+  overview?: ItineraryOverview;
+  days?: DayItinerary[];
+  final_tips?: FinalTips;
+}
+
+interface Trip {
+  destination: string;
+  start_date: string;
+  end_date: string;
+  adults?: number;
+  budget: number;
+  itinerary?: Itinerary;
+  weather_data?: WeatherData;
+  local_cuisine?: Cuisine;
+}
+
 interface TripDisplayProps {
-  trip: any;
+  trip: Trip;
 }
 
 export function TripDisplay({ trip }: TripDisplayProps) {
-  const [itinerary, setItinerary] = useState<any>(null);
-  const [weather, setWeather] = useState<any>(null);
-  const [cuisine, setCuisine] = useState<any>(null);
+  const [itinerary, setItinerary] = useState<Itinerary | null>(null);
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [cuisine, setCuisine] = useState<Cuisine | null>(null);
 
   useEffect(() => {
     if (trip?.itinerary) {
@@ -30,8 +107,8 @@ export function TripDisplay({ trip }: TripDisplayProps) {
       console.log("🍽️ Cuisine data:", trip.local_cuisine);
 
       setItinerary(trip.itinerary);
-      setWeather(trip.weather_data);
-      setCuisine(trip.local_cuisine);
+      setWeather(trip.weather_data || null);
+      setCuisine(trip.local_cuisine || null);
     }
   }, [trip]);
 
@@ -47,7 +124,10 @@ export function TripDisplay({ trip }: TripDisplayProps) {
   }
 
   // Função para renderizar dados de forma segura
-  const renderValue = (value: any, fallback: string = "Não informado") => {
+  const renderValue = (
+    value: unknown,
+    fallback: string = "Não informado"
+  ): string => {
     if (!value || value === "" || value === "{}") return fallback;
     if (typeof value === "object") return JSON.stringify(value);
     return String(value);
@@ -94,38 +174,53 @@ export function TripDisplay({ trip }: TripDisplayProps) {
         </div>
       </div>
 
-      {/* Clima Atual */}
-      {weather && (
+      {/* Clima Durante a Viagem - NOVA SEÇÃO */}
+      {weather && weather.tripForecast && weather.tripForecast.length > 0 && (
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
           <h2 className="text-2xl font-semibold mb-4 flex items-center">
             <span className="text-2xl mr-3">🌤️</span>
-            Clima em {trip.destination}
+            Temperatura média durante a viagem
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-blue-50 rounded-xl p-4">
-              <p className="text-blue-900 font-semibold">Agora</p>
-              <p className="text-2xl font-bold text-blue-700">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {weather.tripForecast.map((day: WeatherForecast, index: number) => (
+              <div
+                key={index}
+                className="bg-blue-50 rounded-xl p-4 text-center"
+              >
+                <p className="text-blue-900 font-semibold text-sm mb-1">
+                  {day.dayName.toUpperCase()}
+                </p>
+                <p className="text-2xl font-bold text-blue-700 mb-1">
+                  {day.temperature}°C
+                </p>
+                <p className="text-xs text-blue-600 capitalize">
+                  {day.description}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Clima Atual - Fallback caso não tenha previsão da viagem */}
+      {weather &&
+        (!weather.tripForecast || weather.tripForecast.length === 0) && (
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+            <h2 className="text-2xl font-semibold mb-4 flex items-center">
+              <span className="text-2xl mr-3">🌤️</span>
+              Clima em {trip.destination}
+            </h2>
+            <div className="bg-blue-50 rounded-xl p-6 text-center">
+              <p className="text-blue-900 font-semibold">Temperatura atual</p>
+              <p className="text-3xl font-bold text-blue-700 my-2">
                 {weather.current?.temperature}°C
               </p>
               <p className="text-blue-600 capitalize">
                 {weather.current?.description}
               </p>
             </div>
-            <div className="bg-green-50 rounded-xl p-4">
-              <p className="text-green-900 font-semibold">Umidade</p>
-              <p className="text-2xl font-bold text-green-700">
-                {weather.current?.humidity}%
-              </p>
-            </div>
-            <div className="bg-purple-50 rounded-xl p-4">
-              <p className="text-purple-900 font-semibold">Vento</p>
-              <p className="text-2xl font-bold text-purple-700">
-                {weather.current?.wind_speed} km/h
-              </p>
-            </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* Gastronomia Local */}
       {cuisine && cuisine.typical_dishes && (
@@ -137,7 +232,7 @@ export function TripDisplay({ trip }: TripDisplayProps) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {cuisine.typical_dishes
               .slice(0, 4)
-              .map((dish: any, index: number) => (
+              .map((dish: Dish, index: number) => (
                 <div
                   key={index}
                   className="border border-gray-200 rounded-xl p-4"
@@ -189,7 +284,7 @@ export function TripDisplay({ trip }: TripDisplayProps) {
         {itinerary.days &&
         Array.isArray(itinerary.days) &&
         itinerary.days.length > 0 ? (
-          itinerary.days.map((day: any, index: number) => (
+          itinerary.days.map((day: DayItinerary, index: number) => (
             <div
               key={index}
               className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"

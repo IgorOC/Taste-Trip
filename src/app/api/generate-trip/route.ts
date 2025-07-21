@@ -185,8 +185,13 @@ export async function POST(request: NextRequest) {
     // Usar URL base dinamicamente
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
+    // MODIFICAÇÃO: Incluir datas na chamada da API do clima
     const weatherResponse = await fetch(
-      `${baseUrl}/api/weather?city=${encodeURIComponent(destination)}`
+      `${baseUrl}/api/weather?city=${encodeURIComponent(
+        destination
+      )}&startDate=${encodeURIComponent(
+        startDate
+      )}&endDate=${encodeURIComponent(endDate)}`
     );
 
     let weatherData = null;
@@ -229,9 +234,21 @@ export async function POST(request: NextRequest) {
 
     const guidelines =
       budgetGuidelines[category as keyof typeof budgetGuidelines];
-    const weatherInfo = weatherData
-      ? `Clima atual: ${weatherData.current.description}, ${weatherData.current.temperature}°C`
-      : "";
+
+    // MODIFICAÇÃO: Criar string com previsão específica da viagem
+    let weatherInfo = "";
+    if (
+      weatherData &&
+      weatherData.tripForecast &&
+      weatherData.tripForecast.length > 0
+    ) {
+      weatherInfo = "Previsão do tempo durante a viagem:\n";
+      weatherData.tripForecast.forEach((day: any, index: number) => {
+        weatherInfo += `${day.dayName}: Média de ${day.temperature}°C\n`;
+      });
+    } else if (weatherData) {
+      weatherInfo = `Clima atual: ${weatherData.current.description}, ${weatherData.current.temperature}°C`;
+    }
 
     const prompt = `
 Crie um roteiro de viagem para ${destination}, saindo de ${origin}, com duração de ${days} dias (de ${startDate} a ${endDate}), orçamento total de R${budget} (${category}), estilo de viagem: ${
@@ -254,7 +271,7 @@ Responda apenas com o JSON.
 `;
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo", 
+      model: "gpt-3.5-turbo",
       messages: [
         {
           role: "system",

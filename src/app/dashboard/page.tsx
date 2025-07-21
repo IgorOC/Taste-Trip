@@ -19,8 +19,37 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
+  // Função para obter o nome do usuário
+  const getUserName = () => {
+    if (!user) return "Usuário";
+
+    // 1. Prioridade: nome completo dos metadados
+    if (user.user_metadata?.full_name) {
+      return user.user_metadata.full_name.split(" ")[0]; // Primeiro nome apenas
+    }
+
+    // 2. Nome do provedor (Google, etc.)
+    if (user.user_metadata?.name) {
+      return user.user_metadata.name.split(" ")[0];
+    }
+
+    // 3. Primeiro nome apenas se disponível
+    if (user.user_metadata?.first_name) {
+      return user.user_metadata.first_name;
+    }
+
+    // 4. Nome do Google (given_name)
+    if (user.user_metadata?.given_name) {
+      return user.user_metadata.given_name;
+    }
+
+    // 5. Fallback: primeira parte do email formatada
+    const emailName = user.email?.split("@")[0] || "Usuário";
+    return emailName.charAt(0).toUpperCase() + emailName.slice(1);
+  };
+
   // Buscar viagens do usuário
-  const { data: trips, error } = await supabase
+  const { data: trips} = await supabase
     .from("trips")
     .select("*")
     .eq("user_id", user.id)
@@ -36,7 +65,7 @@ export default async function DashboardPage() {
         {/* Welcome Section */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Bem-vindo, {user.email?.split("@")[0]}! 👋
+            Bem-vindo, {getUserName()}! 👋
           </h1>
           <p className="text-gray-600">
             Gerencie seus roteiros de viagem e planeje novas aventuras
