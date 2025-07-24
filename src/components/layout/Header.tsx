@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import {LogOut, Menu, X, Settings, UserCircle } from "lucide-react";
+import { LogOut, Menu, X, Settings, UserCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
@@ -195,6 +195,19 @@ export function Header() {
                       </div>
                     )}
                   </div>
+                </div>
+
+                {/* Botão de Logout Visível no Desktop */}
+                <div className="hidden md:flex">
+                  <Button
+                    onClick={handleSignOut}
+                    variant="ghost"
+                    size="sm"
+                    className="text-gray-600 hover:text-red-600 hover:bg-red-50 transition-colors flex items-center space-x-2"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span>Sair</span>
+                  </Button>
                 </div>
 
                 {/* Mobile User Info */}
